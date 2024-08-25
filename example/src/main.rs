@@ -73,6 +73,28 @@ pub mod globals {
             }
         }
     }
+
+    pub mod storage_vars {
+        pub const GROUP: u32 = 0;
+        pub const BINDING: u32 = 0;
+        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+            binding: BINDING,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        pub type Resource<'a> = wgpu::BufferBinding<'a>;
+        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding: BINDING,
+                resource: wgpu::BindingResource::Buffer(resource),
+            }
+        }
+    }
 }
 
 pub mod bind_groups {
@@ -82,6 +104,7 @@ pub mod bind_groups {
     pub struct BindGroup0(pub wgpu::BindGroup);
 
     impl BindGroup0 {
+        const INDEX: u32 = 0;
         const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
             wgpu::BindGroupLayoutDescriptor {
                 label: Some("LayoutDescriptor0"),
@@ -94,7 +117,8 @@ pub mod bind_groups {
         pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
         }
-        pub fn from_bindings(
+
+        pub fn create(
             device: &wgpu::Device,
             color_texture: globals::color_texture::Resource,
             color_sampler: globals::color_sampler::Resource,
@@ -110,8 +134,13 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-            render_pass.set_bind_group(0, &self.0, &[]);
+
+        pub fn set_on_rpass<'a>(&'a self, render_pass: &mut impl wgpu::util::RenderEncoder<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
+        }
+
+        pub fn set_on_cpass<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
         }
     }
 
@@ -119,14 +148,17 @@ pub mod bind_groups {
     pub struct BindGroup1(pub wgpu::BindGroup);
 
     impl BindGroup1 {
+        const INDEX: u32 = 1;
         const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
             wgpu::BindGroupLayoutDescriptor {
                 label: Some("LayoutDescriptor1"),
                 entries: &[globals::uniforms::LAYOUT],
             };
+
         pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
         }
+
         pub fn from_bindings(device: &wgpu::Device, uniforms: globals::uniforms::Resource) -> Self {
             let bind_group_layout = Self::create_bind_group_layout(device);
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -136,8 +168,49 @@ pub mod bind_groups {
             });
             Self(bind_group)
         }
-        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-            render_pass.set_bind_group(1, &self.0, &[]);
+
+        pub fn set_on_rpass<'a>(&'a self, render_pass: &mut impl wgpu::util::RenderEncoder<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
+        }
+        pub fn set_on_cpass<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct CSBindGroup0(pub wgpu::BindGroup);
+
+    impl CSBindGroup0 {
+        const INDEX: u32 = 0;
+        const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
+            wgpu::BindGroupLayoutDescriptor {
+                label: Some("LayoutDescriptor0"),
+                entries: &[globals::storage_vars::LAYOUT],
+            };
+
+        pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+            device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
+        }
+
+        pub fn create(
+            device: &wgpu::Device,
+            storage_vars: globals::storage_vars::Resource,
+        ) -> Self {
+            let bind_group_layout = Self::create_bind_group_layout(device);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[globals::storage_vars::bind_group_entry(storage_vars)],
+                label: Some("BindGroup0"),
+            });
+            Self(bind_group)
+        }
+
+        pub fn set_on_rpass<'a>(&'a self, render_pass: &mut impl wgpu::util::RenderEncoder<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
+        }
+
+        pub fn set_on_cpass<'a>(&'a self, render_pass: &mut wgpu::ComputePass<'a>) {
+            render_pass.set_bind_group(Self::INDEX, &self.0, &[]);
         }
     }
 }
@@ -154,7 +227,7 @@ struct State {
     bind_group1: bind_groups::BindGroup1,
     vertex_buffer: wgpu::Buffer,
     compute_pipeline: wgpu::ComputePipeline,
-    compute_bind_group: compute_shader::bind_groups::BindGroup0,
+    compute_bind_group: bind_groups::CSBindGroup0,
 }
 
 impl State {
@@ -275,7 +348,7 @@ impl State {
         });
 
         // Use the generated types to ensure the correct bind group is assigned to each slot.
-        let bind_group0 = bind_groups::BindGroup0::from_bindings(&device, &view, &sampler);
+        let bind_group0 = bind_groups::BindGroup0::create(&device, &view, &sampler);
 
         // wgsl_to_wgpu will generate alignment assertion checks when using bytemuck.
         // It's strongly recommended to use encase for uniform and storage buffers.
@@ -322,12 +395,8 @@ impl State {
 
         // Uniform and storage buffers both use the same memory layout for structs.
         // Applications that create offsets into storage buffers should use encase::StorageBuffer.
-        let compute_bind_group = compute_shader::bind_groups::BindGroup0::from_bindings(
-            &device,
-            compute_shader::bind_groups::BindGroupLayout0 {
-                uniforms: uniforms_buffer.as_entire_buffer_binding(),
-            },
-        );
+        let compute_bind_group =
+            bind_groups::CSBindGroup0::create(&device, uniforms_buffer.as_entire_buffer_binding());
 
         Self {
             window,
@@ -371,7 +440,7 @@ impl State {
             timestamp_writes: None,
         });
         compute_pass.set_pipeline(&self.compute_pipeline);
-        compute_shader::set_bind_groups(&mut compute_pass, &self.compute_bind_group);
+        self.compute_bind_group.set_on_cpass(&mut compute_pass);
         compute_pass.dispatch_workgroups(1, 1, 1);
         drop(compute_pass);
 
@@ -405,8 +474,8 @@ impl State {
             &push_constant_bytes.into_inner(),
         );
 
-        self.bind_group0.set(&mut render_pass);
-        self.bind_group1.set(&mut render_pass);
+        self.bind_group0.set_on_rpass(&mut render_pass);
+        self.bind_group1.set_on_rpass(&mut render_pass);
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..3, 0..1);

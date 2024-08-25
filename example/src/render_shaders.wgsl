@@ -23,7 +23,6 @@ var color_sampler: sampler;
 
 struct Uniforms {
     color_rgb: vec3<f32>,
-    dummy: f32,
 }
 
 @group(1) @binding(0)
@@ -45,17 +44,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return vec4(0.0);
     } else {
         return constants.color_matrix * vec4(color * uniforms.color_rgb.rgb * scale, 1.0);
-    }
-}
-
-@group(0) @binding(0)
-var<storage, read_write> storage_uniforms: Uniforms;
-
-@compute
-@workgroup_size(1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // A basic compute shader for demonstrating how to use generated bindings.
-    if global_id.x == 0u {
-        storage_uniforms.color_rgb = vec3(1.0);
     }
 }

@@ -10,7 +10,137 @@ use winit::{application::ApplicationHandler, event::*, event_loop::EventLoop, wi
 #[allow(dead_code)]
 mod compute_shader;
 #[allow(dead_code)]
-mod shader;
+mod render_shaders;
+
+// TODO: generate this
+pub mod globals {
+    pub mod color_texture {
+        pub const GROUP: u32 = 0;
+        pub const BINDING: u32 = 0;
+        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+            binding: BINDING,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        };
+        pub type Resource<'a> = &'a wgpu::TextureView;
+        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding: BINDING,
+                resource: wgpu::BindingResource::TextureView(resource),
+            }
+        }
+    }
+    pub mod color_sampler {
+        pub const GROUP: u32 = 0;
+        pub const BINDING: u32 = 1;
+        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+            binding: BINDING,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        };
+        pub type Resource<'a> = &'a wgpu::Sampler;
+        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding: BINDING,
+                resource: wgpu::BindingResource::Sampler(resource),
+            }
+        }
+    }
+    pub mod uniforms {
+        pub const GROUP: u32 = 1;
+        pub const BINDING: u32 = 0;
+        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+            binding: BINDING,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        pub type Resource<'a> = wgpu::BufferBinding<'a>;
+        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry {
+                binding: BINDING,
+                resource: wgpu::BindingResource::Buffer(resource),
+            }
+        }
+    }
+}
+
+pub mod bind_groups {
+    use super::globals;
+
+    #[derive(Debug)]
+    pub struct BindGroup0(pub wgpu::BindGroup);
+
+    impl BindGroup0 {
+        const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
+            wgpu::BindGroupLayoutDescriptor {
+                label: Some("LayoutDescriptor0"),
+                entries: &[
+                    globals::color_texture::LAYOUT,
+                    globals::color_sampler::LAYOUT,
+                ],
+            };
+
+        pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+            device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
+        }
+        pub fn from_bindings(
+            device: &wgpu::Device,
+            color_texture: globals::color_texture::Resource,
+            color_sampler: globals::color_sampler::Resource,
+        ) -> Self {
+            let bind_group_layout = Self::create_bind_group_layout(device);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[
+                    globals::color_texture::bind_group_entry(color_texture),
+                    globals::color_sampler::bind_group_entry(color_sampler),
+                ],
+                label: Some("BindGroup0"),
+            });
+            Self(bind_group)
+        }
+        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+            render_pass.set_bind_group(0, &self.0, &[]);
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct BindGroup1(pub wgpu::BindGroup);
+
+    impl BindGroup1 {
+        const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
+            wgpu::BindGroupLayoutDescriptor {
+                label: Some("LayoutDescriptor1"),
+                entries: &[globals::uniforms::LAYOUT],
+            };
+        pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+            device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
+        }
+        pub fn from_bindings(device: &wgpu::Device, uniforms: globals::uniforms::Resource) -> Self {
+            let bind_group_layout = Self::create_bind_group_layout(device);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &bind_group_layout,
+                entries: &[globals::uniforms::bind_group_entry(uniforms)],
+                label: Some("BindGroup1"),
+            });
+            Self(bind_group)
+        }
+        pub fn set<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+            render_pass.set_bind_group(1, &self.0, &[]);
+        }
+    }
+}
 
 struct State {
     window: Arc<Window>,
@@ -20,8 +150,8 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
-    bind_group0: shader::bind_groups::BindGroup0,
-    bind_group1: shader::bind_groups::BindGroup1,
+    bind_group0: bind_groups::BindGroup0,
+    bind_group1: bind_groups::BindGroup1,
     vertex_buffer: wgpu::Buffer,
     compute_pipeline: wgpu::ComputePipeline,
     compute_bind_group: compute_shader::bind_groups::BindGroup0,
@@ -72,11 +202,11 @@ impl State {
         surface.configure(&device, &config);
 
         // Use the generated bindings to create the pipeline.
-        let module = shader::create_shader_module(&device);
-        let render_pipeline_layout = shader::create_pipeline_layout(&device);
+        let module = render_shaders::create_shader_module(&device);
+        let render_pipeline_layout = render_shaders::create_pipeline_layout(&device);
 
-        // Set overrideable constant values or use shader defaults if None.
-        let overrides = shader::OverrideConstants {
+        // Set overrideable constant values or use render_shaders defaults if None.
+        let overrides = render_shaders::OverrideConstants {
             force_black: false,
             scale: None,
         };
@@ -84,13 +214,13 @@ impl State {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
-            vertex: shader::vertex_state(
+            vertex: render_shaders::vertex_state(
                 &module,
-                &shader::vs_main_entry(wgpu::VertexStepMode::Vertex, &overrides),
+                &render_shaders::vs_main_entry(wgpu::VertexStepMode::Vertex, &overrides),
             ),
-            fragment: Some(shader::fragment_state(
+            fragment: Some(render_shaders::fragment_state(
                 &module,
-                &shader::fs_main_entry([Some(surface_format.into())], &overrides),
+                &render_shaders::fs_main_entry([Some(surface_format.into())], &overrides),
             )),
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
@@ -145,13 +275,7 @@ impl State {
         });
 
         // Use the generated types to ensure the correct bind group is assigned to each slot.
-        let bind_group0 = shader::bind_groups::BindGroup0::from_bindings(
-            &device,
-            shader::bind_groups::BindGroupLayout0 {
-                color_texture: &view,
-                color_sampler: &sampler,
-            },
-        );
+        let bind_group0 = bind_groups::BindGroup0::from_bindings(&device, &view, &sampler);
 
         // wgsl_to_wgpu will generate alignment assertion checks when using bytemuck.
         // It's strongly recommended to use encase for uniform and storage buffers.
@@ -159,7 +283,7 @@ impl State {
         // This avoids any surprises with requirements like storage buffer offset alignment.
         let mut uniform_bytes = UniformBuffer::new(Vec::new());
         uniform_bytes
-            .write(&shader::Uniforms {
+            .write(&render_shaders::Uniforms {
                 // This value will be overwritten by the compute pass.
                 color_rgb: glam::vec3(0.0, 0.0, 0.0),
             })
@@ -171,11 +295,9 @@ impl State {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE,
         });
 
-        let bind_group1 = shader::bind_groups::BindGroup1::from_bindings(
+        let bind_group1 = bind_groups::BindGroup1::from_bindings(
             &device,
-            shader::bind_groups::BindGroupLayout1 {
-                uniforms: uniforms_buffer.as_entire_buffer_binding(),
-            },
+            uniforms_buffer.as_entire_buffer_binding(),
         );
 
         // Initialize the vertex buffer based on the expected input structs.
@@ -183,13 +305,13 @@ impl State {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex buffer"),
             contents: bytemuck::cast_slice(&[
-                shader::VertexInput {
+                render_shaders::VertexInput {
                     position: glam::vec3(-1.0, -1.0, 0.0),
                 },
-                shader::VertexInput {
+                render_shaders::VertexInput {
                     position: glam::vec3(3.0, -1.0, 0.0),
                 },
-                shader::VertexInput {
+                render_shaders::VertexInput {
                     position: glam::vec3(-1.0, 3.0, 0.0),
                 },
             ]),
@@ -273,7 +395,7 @@ impl State {
         // Push constant data also needs to follow alignment rules.
         let mut push_constant_bytes = UniformBuffer::new(Vec::new());
         push_constant_bytes
-            .write(&shader::PushConstants {
+            .write(&render_shaders::PushConstants {
                 color_matrix: glam::Mat4::IDENTITY,
             })
             .unwrap();
@@ -283,8 +405,8 @@ impl State {
             &push_constant_bytes.into_inner(),
         );
 
-        // Use this function to ensure all bind groups are set.
-        crate::shader::set_bind_groups(&mut render_pass, &self.bind_group0, &self.bind_group1);
+        self.bind_group0.set(&mut render_pass);
+        self.bind_group1.set(&mut render_pass);
 
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..3, 0..1);

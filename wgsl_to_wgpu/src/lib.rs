@@ -37,7 +37,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-use bindgroup::{bind_groups_module, get_bind_group_data};
 use consts::pipeline_overridable_constants;
 use entry::{entry_point_constants, fragment_states, vertex_states, vertex_struct_methods};
 use proc_macro2::{Literal, Span, TokenStream};
@@ -45,7 +44,6 @@ use quote::quote;
 use syn::Ident;
 use thiserror::Error;
 
-mod bindgroup;
 mod consts;
 mod entry;
 mod structs;
@@ -208,13 +206,9 @@ fn create_shader_module_inner(
 ) -> Result<String, CreateModuleError> {
     let module = naga::front::wgsl::parse_str(wgsl_source).unwrap();
 
-    let bind_group_data = get_bind_group_data(&module)?;
-    let shader_stages = wgsl::shader_stages(&module);
-
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
     let consts = consts::consts(&module);
-    let bind_groups_module = bind_groups_module(&bind_group_data, shader_stages);
     let vertex_module = vertex_struct_methods(&module);
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
@@ -236,42 +230,18 @@ fn create_shader_module_inner(
         }
     };
 
-    let bind_group_layouts: Vec<_> = bind_group_data
-        .keys()
-        .map(|group_no| {
-            let group = indexed_name_to_ident("BindGroup", *group_no);
-            quote!(bind_groups::#group::get_bind_group_layout(device))
-        })
-        .collect();
-
-    let push_constant_range = push_constant_range(&module, shader_stages);
-
-    let create_pipeline_layout = quote! {
-        pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[
-                    #(&#bind_group_layouts),*
-                ],
-                push_constant_ranges: &[#push_constant_range],
-            })
-        }
-    };
-
     let override_constants = pipeline_overridable_constants(&module);
 
     let output = quote! {
         #structs
         #(#consts)*
         #override_constants
-        #bind_groups_module
         #vertex_module
         #compute_module
         #entry_point_constants
         #vertex_states
         #fragment_states
         #create_shader_module
-        #create_pipeline_layout
     };
 
     if options.rustfmt {
@@ -346,11 +316,9 @@ fn compute_module(module: &naga::Module) -> TokenStream {
         .filter_map(|e| {
             if e.stage == naga::ShaderStage::Compute {
                 let workgroup_size_constant = workgroup_size(e);
-                let create_pipeline = create_compute_pipeline(e);
 
                 Some(quote! {
                     #workgroup_size_constant
-                    #create_pipeline
                 })
             } else {
                 None
@@ -358,15 +326,8 @@ fn compute_module(module: &naga::Module) -> TokenStream {
         })
         .collect();
 
-    if entry_points.is_empty() {
-        // Don't include empty modules.
-        quote!()
-    } else {
-        quote! {
-            pub mod compute {
-                #(#entry_points)*
-            }
-        }
+    quote! {
+        #(#entry_points)*
     }
 }
 

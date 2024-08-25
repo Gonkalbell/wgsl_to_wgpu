@@ -9,7 +9,6 @@ pub struct VertexInput {
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
 pub struct Uniforms {
     pub color_rgb: glam::Vec3,
-    pub dummy: f32,
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, encase :: ShaderType)]
@@ -48,21 +47,7 @@ impl VertexInput {
         }
     }
 }
-pub mod compute {
-    pub const MAIN_WORKGROUP_SIZE: [u32; 3] = [1, 1, 1];
-    pub fn create_main_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
-        let module = super::create_shader_module(device);
-        let layout = super::create_pipeline_layout(device);
-        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute Pipeline main"),
-            layout: Some(&layout),
-            module: &module,
-            entry_point: "main",
-            compilation_options: Default::default(),
-            cache: Default::default(),
-        })
-    }
-}
+pub const MAIN_WORKGROUP_SIZE: [u32; 3] = [1, 1, 1];
 pub const ENTRY_VS_MAIN: &str = "vs_main";
 pub const ENTRY_FS_MAIN: &str = "fs_main";
 pub const ENTRY_MAIN: &str = "main";

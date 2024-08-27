@@ -4,7 +4,7 @@ use syn::Ident;
 
 use crate::{wgsl::rust_type, MatrixVectorTypes};
 
-pub fn consts(module: &naga::Module) -> Vec<TokenStream> {
+pub fn consts(module: &naga::Module) -> TokenStream {
     // Create matching Rust constants for WGSl constants.
     module
         .constants
@@ -162,7 +162,7 @@ mod tests {
         let module = naga::front::wgsl::parse_str(source).unwrap();
 
         let consts = consts(&module);
-        let actual = quote!(#(#consts)*);
+        let actual = quote!(#consts);
 
         assert_tokens_eq!(
             quote! {

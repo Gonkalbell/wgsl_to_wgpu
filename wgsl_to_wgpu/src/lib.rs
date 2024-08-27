@@ -46,6 +46,7 @@ use thiserror::Error;
 
 mod consts;
 mod entry;
+mod globals;
 mod structs;
 mod wgsl;
 
@@ -209,6 +210,7 @@ fn create_shader_module_inner(
     // Write all the structs, including uniforms and entry function inputs.
     let structs = structs::structs(&module, options);
     let consts = consts::consts(&module);
+    let globals = globals::globals(&module);
     let vertex_module = vertex_struct_methods(&module);
     let compute_module = compute_module(&module);
     let entry_point_constants = entry_point_constants(&module);
@@ -234,7 +236,8 @@ fn create_shader_module_inner(
 
     let output = quote! {
         #structs
-        #(#consts)*
+        #consts
+        #globals
         #override_constants
         #vertex_module
         #compute_module
@@ -281,7 +284,7 @@ fn push_constant_range(
 
 fn pretty_print(output: TokenStream) -> String {
     let file = syn::parse_file(&output.to_string()).unwrap();
-    prettyplease::unparse(&file)
+    prettyplease::unparse(&file).replace("\r\n", "\n")
 }
 
 fn pretty_print_rustfmt(tokens: TokenStream) -> String {
@@ -461,21 +464,6 @@ mod test {
                             source: wgpu::ShaderSource::Wgsl(source),
                         })
                 }
-                pub fn create_pipeline_layout(device: &wgpu::Device) -> wgpu::PipelineLayout {
-                    device
-                        .create_pipeline_layout(
-                            &wgpu::PipelineLayoutDescriptor {
-                                label: None,
-                                bind_group_layouts: &[],
-                                push_constant_ranges: &[
-                                    wgpu::PushConstantRange {
-                                        stages: wgpu::ShaderStages::FRAGMENT,
-                                        range: 0..16,
-                                    },
-                                ],
-                            },
-                        )
-                }
             },
             actual
         );
@@ -519,24 +507,6 @@ mod test {
         "#};
 
         create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
-    }
-
-    #[test]
-    fn create_shader_module_non_consecutive_bind_groups() {
-        let source = indoc! {r#"
-            @group(0) @binding(0) var<uniform> a: vec4<f32>;
-            @group(1) @binding(0) var<uniform> b: vec4<f32>;
-            @group(3) @binding(0) var<uniform> c: vec4<f32>;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
-        assert!(matches!(
-            result,
-            Err(CreateModuleError::NonConsecutiveBindGroups)
-        ));
     }
 
     #[test]
@@ -832,40 +802,8 @@ mod test {
 
         assert_tokens_eq!(
             quote! {
-                pub mod compute {
-                    pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
-                    pub fn create_main1_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
-                        let module = super::create_shader_module(device);
-                        let layout = super::create_pipeline_layout(device);
-                        device
-                            .create_compute_pipeline(
-                                &wgpu::ComputePipelineDescriptor {
-                                    label: Some("Compute Pipeline main1"),
-                                    layout: Some(&layout),
-                                    module: &module,
-                                    entry_point: "main1",
-                                    compilation_options: Default::default(),
-                                    cache: Default::default(),
-                                },
-                            )
-                    }
-                    pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
-                    pub fn create_main2_pipeline(device: &wgpu::Device) -> wgpu::ComputePipeline {
-                        let module = super::create_shader_module(device);
-                        let layout = super::create_pipeline_layout(device);
-                        device
-                            .create_compute_pipeline(
-                                &wgpu::ComputePipelineDescriptor {
-                                    label: Some("Compute Pipeline main2"),
-                                    layout: Some(&layout),
-                                    module: &module,
-                                    entry_point: "main2",
-                                    compilation_options: Default::default(),
-                                    cache: Default::default(),
-                                },
-                            )
-                    }
-                }
+                pub const MAIN1_WORKGROUP_SIZE: [u32; 3] = [1, 2, 3];
+                pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
             },
             actual
         );

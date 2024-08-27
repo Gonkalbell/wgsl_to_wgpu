@@ -10,93 +10,8 @@ use winit::{application::ApplicationHandler, event::*, event_loop::EventLoop, wi
 #[allow(dead_code)]
 mod shader;
 
-// TODO: generate this
-pub mod globals {
-    pub mod color_texture {
-        pub const GROUP: u32 = 0;
-        pub const BINDING: u32 = 0;
-        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
-            binding: BINDING,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                view_dimension: wgpu::TextureViewDimension::D2,
-                multisampled: false,
-            },
-            count: None,
-        };
-        pub type Resource<'a> = &'a wgpu::TextureView;
-        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
-            wgpu::BindGroupEntry {
-                binding: BINDING,
-                resource: wgpu::BindingResource::TextureView(resource),
-            }
-        }
-    }
-    pub mod color_sampler {
-        pub const GROUP: u32 = 0;
-        pub const BINDING: u32 = 1;
-        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
-            binding: BINDING,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count: None,
-        };
-        pub type Resource<'a> = &'a wgpu::Sampler;
-        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
-            wgpu::BindGroupEntry {
-                binding: BINDING,
-                resource: wgpu::BindingResource::Sampler(resource),
-            }
-        }
-    }
-    pub mod uniforms {
-        pub const GROUP: u32 = 1;
-        pub const BINDING: u32 = 0;
-        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
-            binding: BINDING,
-            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        };
-        pub type Resource<'a> = wgpu::BufferBinding<'a>;
-        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
-            wgpu::BindGroupEntry {
-                binding: BINDING,
-                resource: wgpu::BindingResource::Buffer(resource),
-            }
-        }
-    }
-
-    pub mod storage_vars {
-        pub const GROUP: u32 = 0;
-        pub const BINDING: u32 = 0;
-        pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
-            binding: BINDING,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        };
-        pub type Resource<'a> = wgpu::BufferBinding<'a>;
-        pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
-            wgpu::BindGroupEntry {
-                binding: BINDING,
-                resource: wgpu::BindingResource::Buffer(resource),
-            }
-        }
-    }
-}
-
 pub mod bind_groups {
-    use super::globals;
+    use super::shader;
 
     #[derive(Debug)]
     pub struct BindGroup0(pub wgpu::BindGroup);
@@ -106,10 +21,7 @@ pub mod bind_groups {
         const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
             wgpu::BindGroupLayoutDescriptor {
                 label: Some("LayoutDescriptor0"),
-                entries: &[
-                    globals::color_texture::LAYOUT,
-                    globals::color_sampler::LAYOUT,
-                ],
+                entries: &[shader::color_texture::LAYOUT, shader::color_sampler::LAYOUT],
             };
 
         pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
@@ -118,15 +30,15 @@ pub mod bind_groups {
 
         pub fn create(
             device: &wgpu::Device,
-            color_texture: globals::color_texture::Resource,
-            color_sampler: globals::color_sampler::Resource,
+            color_texture: shader::color_texture::Resource,
+            color_sampler: shader::color_sampler::Resource,
         ) -> Self {
             let bind_group_layout = Self::create_bind_group_layout(device);
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
                 entries: &[
-                    globals::color_texture::bind_group_entry(color_texture),
-                    globals::color_sampler::bind_group_entry(color_sampler),
+                    shader::color_texture::bind_group_entry(color_texture),
+                    shader::color_sampler::bind_group_entry(color_sampler),
                 ],
                 label: Some("BindGroup0"),
             });
@@ -150,18 +62,18 @@ pub mod bind_groups {
         const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
             wgpu::BindGroupLayoutDescriptor {
                 label: Some("LayoutDescriptor1"),
-                entries: &[globals::uniforms::LAYOUT],
+                entries: &[shader::uniforms::LAYOUT],
             };
 
         pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
         }
 
-        pub fn from_bindings(device: &wgpu::Device, uniforms: globals::uniforms::Resource) -> Self {
+        pub fn from_bindings(device: &wgpu::Device, uniforms: shader::uniforms::Resource) -> Self {
             let bind_group_layout = Self::create_bind_group_layout(device);
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
-                entries: &[globals::uniforms::bind_group_entry(uniforms)],
+                entries: &[shader::uniforms::bind_group_entry(uniforms)],
                 label: Some("BindGroup1"),
             });
             Self(bind_group)
@@ -183,21 +95,21 @@ pub mod bind_groups {
         const LAYOUT_DESCRIPTOR: wgpu::BindGroupLayoutDescriptor<'static> =
             wgpu::BindGroupLayoutDescriptor {
                 label: Some("LayoutDescriptor0"),
-                entries: &[globals::storage_vars::LAYOUT],
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ..shader::storage_vars::LAYOUT
+                }],
             };
 
         pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             device.create_bind_group_layout(&Self::LAYOUT_DESCRIPTOR)
         }
 
-        pub fn create(
-            device: &wgpu::Device,
-            storage_vars: globals::storage_vars::Resource,
-        ) -> Self {
+        pub fn create(device: &wgpu::Device, storage_vars: shader::storage_vars::Resource) -> Self {
             let bind_group_layout = Self::create_bind_group_layout(device);
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 layout: &bind_group_layout,
-                entries: &[globals::storage_vars::bind_group_entry(storage_vars)],
+                entries: &[shader::storage_vars::bind_group_entry(storage_vars)],
                 label: Some("BindGroup0"),
             });
             Self(bind_group)

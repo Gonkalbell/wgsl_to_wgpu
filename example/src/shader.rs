@@ -15,6 +15,86 @@ pub struct Uniforms {
 pub struct PushConstants {
     pub color_matrix: glam::Mat4,
 }
+pub mod color_texture {
+    pub const GROUP: u32 = 0u32;
+    pub const BINDING: u32 = 0u32;
+    pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+        binding: BINDING,
+        visibility: wgpu::ShaderStages::all(),
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+        },
+        count: None,
+    };
+    pub type Resource<'a> = &'a wgpu::TextureView;
+    pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding: BINDING,
+            resource: wgpu::BindingResource::TextureView(resource),
+        }
+    }
+}
+pub mod color_sampler {
+    pub const GROUP: u32 = 0u32;
+    pub const BINDING: u32 = 1u32;
+    pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+        binding: BINDING,
+        visibility: wgpu::ShaderStages::all(),
+        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+        count: None,
+    };
+    pub type Resource<'a> = &'a wgpu::Sampler;
+    pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding: BINDING,
+            resource: wgpu::BindingResource::Sampler(resource),
+        }
+    }
+}
+pub mod uniforms {
+    pub const GROUP: u32 = 1u32;
+    pub const BINDING: u32 = 0u32;
+    pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+        binding: BINDING,
+        visibility: wgpu::ShaderStages::all(),
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
+    pub type Resource<'a> = wgpu::BufferBinding<'a>;
+    pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding: BINDING,
+            resource: wgpu::BindingResource::Buffer(resource),
+        }
+    }
+}
+pub mod storage_vars {
+    pub const GROUP: u32 = 0u32;
+    pub const BINDING: u32 = 0u32;
+    pub const LAYOUT: wgpu::BindGroupLayoutEntry = wgpu::BindGroupLayoutEntry {
+        binding: BINDING,
+        visibility: wgpu::ShaderStages::all(),
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    };
+    pub type Resource<'a> = wgpu::BufferBinding<'a>;
+    pub fn bind_group_entry(resource: Resource) -> wgpu::BindGroupEntry<'_> {
+        wgpu::BindGroupEntry {
+            binding: BINDING,
+            resource: wgpu::BindingResource::Buffer(resource),
+        }
+    }
+}
 pub struct OverrideConstants {
     pub force_black: bool,
     pub scale: Option<f32>,

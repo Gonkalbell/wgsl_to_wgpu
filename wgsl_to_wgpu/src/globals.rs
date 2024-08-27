@@ -10,6 +10,9 @@ pub fn globals(module: &naga::Module) -> TokenStream {
         .global_variables
         .iter()
         .filter_map(|(_, global)| -> Option<TokenStream> {
+            if let naga::AddressSpace::PushConstant = global.space {
+                
+            }
             global.name.as_ref().zip(global.binding.as_ref()).map(|(name, ResourceBinding { group, binding })| {
                 let name = format_ident!("{name}");
                 let ty = &module.types[global.ty];

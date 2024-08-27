@@ -254,34 +254,6 @@ fn create_shader_module_inner(
     }
 }
 
-fn push_constant_range(
-    module: &naga::Module,
-    shader_stages: wgpu::ShaderStages,
-) -> Option<TokenStream> {
-    // Assume only one variable is used with var<push_constant> in WGSL.
-    let push_constant_size = module.global_variables.iter().find_map(|g| {
-        if g.1.space == naga::AddressSpace::PushConstant {
-            Some(module.types[g.1.ty].inner.size(module.to_ctx()))
-        } else {
-            None
-        }
-    });
-
-    let stages = quote_shader_stages(shader_stages);
-
-    // Use a single push constant range for all shader stages.
-    // This allows easily setting push constants in a single call with offset 0.
-    push_constant_size.map(|size| {
-        let size = Literal::usize_unsuffixed(size as usize);
-        quote! {
-            wgpu::PushConstantRange {
-                stages: #stages,
-                range: 0..#size
-            }
-        }
-    })
-}
-
 fn pretty_print(output: TokenStream) -> String {
     let file = syn::parse_file(&output.to_string()).unwrap();
     prettyplease::unparse(&file).replace("\r\n", "\n")
@@ -308,10 +280,6 @@ fn pretty_print_rustfmt(tokens: TokenStream) -> String {
     value.to_string()
 }
 
-fn indexed_name_to_ident(name: &str, index: u32) -> Ident {
-    Ident::new(&format!("{name}{index}"), Span::call_site())
-}
-
 fn compute_module(module: &naga::Module) -> TokenStream {
     let entry_points: Vec<_> = module
         .entry_points
@@ -334,28 +302,6 @@ fn compute_module(module: &naga::Module) -> TokenStream {
     }
 }
 
-fn create_compute_pipeline(e: &naga::EntryPoint) -> TokenStream {
-    // Compute pipeline creation has few parameters and can be generated.
-    let pipeline_name = Ident::new(&format!("create_{}_pipeline", e.name), Span::call_site());
-    let entry_point = &e.name;
-    // TODO: Include a user supplied module name in the label?
-    let label = format!("Compute Pipeline {}", e.name);
-    quote! {
-        pub fn #pipeline_name(device: &wgpu::Device) -> wgpu::ComputePipeline {
-            let module = super::create_shader_module(device);
-            let layout = super::create_pipeline_layout(device);
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(#label),
-                layout: Some(&layout),
-                module: &module,
-                entry_point: #entry_point,
-                compilation_options: Default::default(),
-                cache: Default::default(),
-            })
-        }
-    }
-}
-
 fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
     let name = Ident::new(
         &format!("{}_WORKGROUP_SIZE", e.name.to_uppercase()),
@@ -365,31 +311,6 @@ fn workgroup_size(e: &naga::EntryPoint) -> TokenStream {
         .workgroup_size
         .map(|s| Literal::usize_unsuffixed(s as usize));
     quote!(pub const #name: [u32; 3] = [#x, #y, #z];)
-}
-
-fn quote_shader_stages(stages: wgpu::ShaderStages) -> TokenStream {
-    if stages == wgpu::ShaderStages::all() {
-        quote!(wgpu::ShaderStages::all())
-    } else if stages == wgpu::ShaderStages::VERTEX_FRAGMENT {
-        quote!(wgpu::ShaderStages::VERTEX_FRAGMENT)
-    } else {
-        let mut components = Vec::new();
-        if stages.contains(wgpu::ShaderStages::VERTEX) {
-            components.push(quote!(wgpu::ShaderStages::VERTEX));
-        }
-        if stages.contains(wgpu::ShaderStages::FRAGMENT) {
-            components.push(quote!(wgpu::ShaderStages::FRAGMENT));
-        }
-        if stages.contains(wgpu::ShaderStages::COMPUTE) {
-            components.push(quote!(wgpu::ShaderStages::COMPUTE));
-        }
-
-        if let Some((first, remaining)) = components.split_first() {
-            quote!(#first #(.union(#remaining))*)
-        } else {
-            quote!(wgpu::ShaderStages::NONE)
-        }
-    }
 }
 
 // Tokenstreams can't be compared directly using PartialEq.
@@ -806,42 +727,6 @@ mod test {
                 pub const MAIN2_WORKGROUP_SIZE: [u32; 3] = [256, 1, 1];
             },
             actual
-        );
-    }
-
-    #[test]
-    fn quote_all_shader_stages() {
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::NONE),
-            quote_shader_stages(wgpu::ShaderStages::NONE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::FRAGMENT),
-            quote_shader_stages(wgpu::ShaderStages::FRAGMENT)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::COMPUTE),
-            quote_shader_stages(wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX_FRAGMENT),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX_FRAGMENT)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::COMPUTE)),
-            quote_shader_stages(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::FRAGMENT.union(wgpu::ShaderStages::COMPUTE)),
-            quote_shader_stages(wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE)
-        );
-        assert_tokens_eq!(
-            quote!(wgpu::ShaderStages::all()),
-            quote_shader_stages(wgpu::ShaderStages::all())
         );
     }
 }

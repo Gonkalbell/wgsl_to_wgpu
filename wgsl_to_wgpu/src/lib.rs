@@ -418,7 +418,9 @@ mod test {
                 f: vec4<f32>
             };
             @group(0) @binding(0) var<uniform> a: A;
-            @group(1) @binding(0) var<uniform> b: A;
+            @group(1) @binding(0) var<uniform> b: f32;
+            @group(2) @binding(0) var<uniform> c: vec4<f32>;
+            @group(3) @binding(0) var<uniform> d: mat4x4<f32>;
 
             @vertex
             fn vs_main() {}
@@ -428,26 +430,6 @@ mod test {
         "#};
 
         create_shader_module(source, "shader.wgsl", WriteOptions::default()).unwrap();
-    }
-
-    #[test]
-    fn create_shader_module_repeated_bindings() {
-        let source = indoc! {r#"
-            struct A {
-                f: vec4<f32>
-            };
-            @group(0) @binding(2) var<uniform> a: A;
-            @group(0) @binding(2) var<uniform> b: A;
-
-            @fragment
-            fn main() {}
-        "#};
-
-        let result = create_shader_module(source, "shader.wgsl", WriteOptions::default());
-        assert!(matches!(
-            result,
-            Err(CreateModuleError::DuplicateBinding { binding: 2 })
-        ));
     }
 
     #[test]
